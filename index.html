@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VR Arcade · Store · .gar</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #000; font-family: Arial, sans-serif;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  canvas { display: block; position: absolute; top: 0; left: 0; z-index: 2; touch-action: none; }
+  #videoFeed, #videoTracker { display: none; }
+  
+  #ui2d { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  
+  #btnSettings {
+    position: absolute; top: 20px; right: 20px; width: 60px; height: 60px;
+    background: rgba(79, 195, 247, 0.9); border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 30px; color: #000; pointer-events: auto; box-shadow: 0 0 15px rgba(79,195,247,0.8); cursor: pointer; border: none;
+  }
+
+  #settingsPanel {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.92); display: none; flex-direction: column;
+    align-items: center; justify-content: flex-start; pointer-events: auto; color: #fff; padding: 20px; overflow-y: auto;
+  }
+  #settingsPanel h2 { color: #ff4081; margin: 10px 0 20px; font-size: 1.7rem; text-align: center; }
+  #settingsPanel h3 { color: #ffd54f; margin: 20px 0 10px; font-size: 1.2rem; text-align: center; }
+  .slider-container { width: 100%; max-width: 400px; margin-bottom: 15px; text-align: center; }
+  .slider-container label { display: block; margin-bottom: 8px; font-size: 1.05rem; color: #ccc; }
+  input[type=range] { width: 100%; height: 20px; -webkit-appearance: none; background: #333; border-radius: 10px; outline: none; margin-bottom: 10px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 40px; height: 40px; border-radius: 50%; background: #4fc3f7; cursor: pointer; box-shadow: 0 0 10px #4fc3f7; }
+  .value-display { font-family: monospace; font-size: 1.1rem; color: #4fc3f7; }
+  .btn-action { margin-top: 12px; padding: 13px 34px; font-size: 1rem; border-radius: 30px; border: none; cursor: pointer; font-weight: bold; }
+  .btn-save { background: #69f0ae; color: #000; }
+  .btn-close { background: #ef5350; color: #fff; margin-top: 10px; }
+  .btn-load { background: #ffd54f; color: #000; }
+  .btn-clear { background: #ef5350; color: #fff; margin-top: 12px; }
+  #garList { width: 100%; max-width: 420px; max-height: 200px; overflow-y: auto; background: #101820; border-radius: 10px; padding: 8px; margin-top: 6px; }
+  .gar-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #1c2b3a; font-size: 0.9rem; }
+  .gar-item .title { color: #e3f2fd; font-weight: bold; }
+  .gar-item .meta { color: #7f9bb3; font-size: 0.78rem; }
+  .gar-item .del { background: #ef5350; color: #fff; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-weight: bold; }
+  #status { position: fixed; top: 20px; left: 20px; color: #4fc3f7; font-size: 0.75rem; z-index: 5; background: rgba(0,0,0,0.5); padding: 6px 10px; border-radius: 6px; pointer-events: none; font-family: monospace; }
+  #startOverlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.92); color: #fff; text-align: center; z-index: 20; padding: 20px; }
+  #startBtn { margin-top: 20px; padding: 18px 50px; font-size: 1.2rem; background: linear-gradient(135deg, #4fc3f7, #0288d1); color: #fff; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<video id="videoFeed" playsinline muted autoplay></video>
+<video id="videoTracker" playsinline muted autoplay></video>
+<input type="file" id="garFileInput" accept=".gar,application/json">
+
+<div id="ui2d">
+  <button id="btnSettings">⚙️</button>
+  <div id="settingsPanel">
+    <h2>Настройки Стерео</h2>
+    <div class="slider-container">
+      <label>Сдвиг картинки (в пикселях)</label>
+      <input type="range" id="ipdSlider" min="-200" max="200" value="25" step="1">
+      <div class="value-display" id="ipdValue">25 px</div>
+    </div>
+    <button class="btn-action btn-save" id="btnSave">СОХРАНИТЬ В .TXT</button>
+    <h3>Загрузка игр (.gar)</h3>
+    <button class="btn-action btn-load" id="btnLoadGar">+ Загрузить .gar</button>
+    <div id="garList"></div>
+    <button class="btn-action btn-clear" id="btnClearGames">🗑 Очистить все игры</button>
+    <button class="btn-action btn-close" id="btnCloseSettings">ЗАКРЫТЬ</button>
+  </div>
+</div>
+
+<div id="status" class="hidden">Инициализация…</div>
+
+<div id="startOverlay">
+  <h1>VR Arcade</h1>
+  <p>Магазин игр (.gar) · Камера в качестве фона</p>
+  <button id="startBtn">ЗАПУСТИТЬ</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+// ================= Глобальные =================
+let scene, camera, renderer, clock;
+let videoFeed, videoTracker, handsModel;
+let handLandmarksArray = [];
+let videoTexture = null;
+let bgMesh = null;
+
+let laserLine, handDot;
+let handLines = [], jointMeshes = [];
+
+let hoverTimer = 0, pinchCooldown = 0, lastPinchState = false;
+
+const FOV_DEG = 75;
+const MAX_LASER_DIST = 15;
+const HOVER_CLICK_TIME = 0.8;
+
+let settings = { viewportShift: 25 };
+let appState = 'MENU'; 
+let storeGroup = null, storePanelMesh = null;
+let targetQuat = new THREE.Quaternion();
+let isFirstGyroFrame = true;
+let wakeLock = null;
+
+// ================= API =================
+window.VRShinecon = {
+  THREE: null, scene: null, camera: null, handLandmarksArray: [], handPointToWorld: null, currentGame: null, games: {},
+  registerGame: function (entry) {
+    if (!entry || !entry.id || !entry.api) return;
+    activeGame = { id: entry.id, api: entry.api }; this.games[entry.id] = entry.api;
+  },
+  exitGame: function () {
+    if (activeGame && activeGame.api && typeof activeGame.api.stop === 'function') { try { activeGame.api.stop(); } catch (e) {} }
+    activeGame = null; appState = 'STORE'; if (storeGroup) storeGroup.visible = true;
+    if (handLandmarksArray.length === 0) { handLines.forEach(l => l.visible = false); jointMeshes.forEach(m => m.visible = false); }
+    drawStore(); setStatusText('Магазин .gar');
+  },
+  setStatusText: function (t) { setStatusText(t); }, getAppState: function () { return appState; }
+};
+
+let storeCanvas = null, storeCtx = null, storeTex = null;
+let storeState = { tab: 'games', page: 0, perPage: 4, buttons: [], games: [] };
+const GAR_STORAGE_KEY = 'vr_arcade_gar_games';
+let activeGame = null;
+
+function loadGarGamesFromStorage() { try { const raw = localStorage.getItem(GAR_STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; } }
+function saveGarGamesToStorage() { try { localStorage.setItem(GAR_STORAGE_KEY, JSON.stringify(storeState.games)); } catch (e) {} }
+function clearAllGames() { if (storeState.games.length === 0) return; if (!confirm('Удалить все игры?')) return; storeState.games = []; localStorage.removeItem(GAR_STORAGE_KEY); refreshGarListUI(); drawStore(); }
+function refreshGarListUI() {
+  const listEl = document.getElementById('garList'); if (!listEl) return;
+  if (storeState.games.length === 0) { listEl.innerHTML = '<div class="empty">Нет игр</div>'; return; }
+  listEl.innerHTML = '';
+  storeState.games.forEach((g, idx) => {
+    const row = document.createElement('div'); row.className = 'gar-item';
+    row.innerHTML = `<div><div class="title">${escapeHtml(g.title)}</div><div class="meta">${escapeHtml(g.author)}</div></div><button class="del" data-idx="${idx}">✕</button>`;
+    row.querySelector('.del').addEventListener('click', () => { storeState.games.splice(idx, 1); saveGarGamesToStorage(); refreshGarListUI(); drawStore(); });
+    listEl.appendChild(row);
+  });
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function handleGarFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data.id || !data.title) throw new Error('Нет id/title');
+      data.id = String(data.id); data.title = String(data.title); data.author = data.author||'unknown'; data.type='custom'; data.entryCode = data.entryCode||'';
+      const existing = storeState.games.findIndex(g => g.id === data.id);
+      if (existing >= 0) storeState.games[existing] = data; else storeState.games.push(data);
+      saveGarGamesToStorage(); refreshGarListUI(); drawStore();
+    } catch (err) { showToast('Ошибка .gar'); }
+  };
+  reader.readAsText(file);
+}
+function pickGarFile() { document.getElementById('garFileInput').click(); }
+
+function initUI() {
+  document.getElementById('btnSettings').addEventListener('click', () => { document.getElementById('settingsPanel').style.display = 'flex'; refreshGarListUI(); });
+  document.getElementById('btnCloseSettings').addEventListener('click', () => { document.getElementById('settingsPanel').style.display = 'none'; });
+  document.getElementById('ipdSlider').addEventListener('input', (e) => { settings.viewportShift = parseInt(e.target.value); document.getElementById('ipdValue').textContent = settings.viewportShift + ' px'; });
+  document.getElementById('btnSave').addEventListener('click', () => { const blob = new Blob([`Settings\nShift: ${settings.viewportShift}`], { type: 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'vr_settings.txt'; a.click(); });
+  document.getElementById('btnLoadGar').addEventListener('click', pickGarFile);
+  document.getElementById('btnClearGames').addEventListener('click', clearAllGames);
+  document.getElementById('garFileInput').addEventListener('change', (e) => { handleGarFile(e.target.files[0]); e.target.value = ''; });
+}
+
+function init() {
+  videoFeed = document.getElementById('videoFeed'); videoTracker = document.getElementById('videoTracker');
+  scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(FOV_DEG, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 1.6, 0); clock = new THREE.Clock();
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
+  renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); renderer.setClearColor(0x101820, 1);
+  document.body.appendChild(renderer.domElement);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9)); const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(3, 5, 4); scene.add(dir);
+  
+  storeState.games = loadGarGamesFromStorage();
+  window.VRShinecon.THREE = THREE; window.VRShinecon.scene = scene; window.VRShinecon.camera = camera;
+
+  createStore(); createHandSkeleton();
+  
+  const bgScene = new THREE.Scene();
+  const bgCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0x101820, depthTest: false, depthWrite: false }));
+  bgScene.add(bgMesh);
+  window.bgScene = bgScene;
+  window.bgCam = bgCam;
+
+  const laserGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)]);
+  laserLine = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({ color: 0xff4081, transparent: true, opacity: 0.8 })); laserLine.visible = false; scene.add(laserLine);
+  handDot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 12), new THREE.MeshBasicMaterial({ color: 0xff4081 })); handDot.visible = false; scene.add(handDot);
+
+  window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight));
+  document.getElementById('startBtn').addEventListener('click', startAll);
+  animate();
+}
+
+// ================= МУЛЬТИ-МЕТОД КАМЕРЫ + ШИРОКИЙ УГОЛ =================
+async function startCameraStream() {
+  let selectedDeviceId = null;
+  
+  try {
+    // 1. Сначала просим доступ, чтобы получить названия камер
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+    
+    // 2. Ищем широкоугольную камеру по названию (ультраширокий объектив)
+    const wideCam = videoDevices.find(d => {
+      const label = d.label.toLowerCase();
+      return label.includes('ultra') || label.includes('wide') || label.includes('0.5') || label.includes('camera2 1');
+    });
+    
+    if (wideCam) {
+      selectedDeviceId = wideCam.deviceId;
+      setStatusText('Камера: Широкоугольная');
+    } else {
+      // Если широкой нет, берем обычную (не фронтальную)
+      const backCam = videoDevices.find(d => {
+        const label = d.label.toLowerCase();
+        return label.includes('back') || label.includes('rear') || label.includes('environment');
+      });
+      if (backCam) selectedDeviceId = backCam.deviceId;
+      setStatusText('Камера: Обычная');
+    }
+  } catch(e) { console.warn('Не удалось найти широкую камеру', e); }
+
+  // 3. Запускаем поток с выбранной камеры (или дефолтной)
+  try {
+    const constraints = { 
+      video: selectedDeviceId ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, 
+      audio: false 
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    videoFeed.srcObject = stream; videoTracker.srcObject = stream;
+    await videoFeed.play(); await videoTracker.play();
+    await new Promise(res => { if (videoFeed.videoWidth) res(); else videoFeed.onloadedmetadata = () => res(); });
+    return true;
+  } catch(e) {
+    // Если что-то пошло не так, пробуем вообще любую камеру
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      videoFeed.srcObject = stream; videoTracker.srcObject = stream;
+      await videoFeed.play(); await videoTracker.play();
+      return true;
+    } catch(e2) { return false; }
+  }
+}
+
+async function startAll() {
+  document.getElementById('startOverlay').style.display = 'none';
+  document.getElementById('status').classList.remove('hidden');
+  try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (err) {}
+  try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch(e) {}
+  
+  setStatusText('Камера: поиск...');
+  const ok = await startCameraStream();
+  
+  if (ok) {
+    videoTexture = new THREE.VideoTexture(videoFeed);
+    videoTexture.minFilter = THREE.LinearFilter;
+    videoTexture.magFilter = THREE.LinearFilter;
+    bgMesh.material.map = videoTexture;
+    bgMesh.material.color.setHex(0xffffff);
+    bgMesh.material.needsUpdate = true;
+    
+    handsModel = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    handsModel.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+    handsModel.onResults(onHandsResults);
+    const sendFrame = async () => {
+      if (handsModel && videoTracker.readyState >= 2) { try { await handsModel.send({ image: videoTracker }); } catch (e) {} }
+      requestAnimationFrame(sendFrame);
+    };
+    sendFrame();
+  } else {
+    setStatusText('Камера: ОШИБКА (играем без фона)');
+    bgMesh.material.color.setHex(0x101820);
+  }
+  
+  initGyro(); enterStoreMode();
+}
+
+function onHandsResults(res) {
+  const statEl = document.getElementById('status'); const baseText = statEl.textContent.split(' · Рук:')[0];
+  if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+    handLandmarksArray = res.multiHandLandmarks; window.VRShinecon.handLandmarksArray = handLandmarksArray;
+    statEl.textContent = baseText + ' · Рук: ' + handLandmarksArray.length;
+  } else {
+    handLandmarksArray = []; window.VRShinecon.handLandmarksArray = []; statEl.textContent = baseText;
+  }
+}
+
+// ================= ГИРОСКОП =================
+const zee = new THREE.Vector3(0, 0, 1), euler = new THREE.Euler(), q0 = new THREE.Quaternion();
+const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); let smoothedQuat = new THREE.Quaternion();
+function initGyro() {
+  const handler = (e) => {
+    if (e.alpha === null) return;
+    const alpha = THREE.MathUtils.degToRad(e.alpha), beta = THREE.MathUtils.degToRad(e.beta || 0), gamma = THREE.MathUtils.degToRad(e.gamma || 0), orient = THREE.MathUtils.degToRad(window.orientation || 0);
+    euler.set(beta, alpha, -gamma, 'YXZ'); targetQuat.setFromEuler(euler); targetQuat.multiply(q1); targetQuat.multiply(q0.setFromAxisAngle(zee, -orient));
+    if (isFirstGyroFrame) { smoothedQuat.copy(targetQuat); isFirstGyroFrame = false; } 
+    else { smoothedQuat.slerp(targetQuat, 0.6); } 
+    camera.quaternion.copy(smoothedQuat);
+  };
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') window.addEventListener('deviceorientation', handler, true); });
+  } else window.addEventListener('deviceorientation', handler, true);
+}
+
+// ================= ЖЕСТЫ И ПРОЕКЦИЯ =================
+function isPinch(lm) {
+  if (!lm) return false;
+  const thumbTip = lm[4], indexTip = lm[8];
+  return Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y) < 0.06;
+}
+
+function handPointToWorld(p, baseDist) {
+  const ndcX = p.x * 2 - 1;
+  const ndcY = -(p.y * 2 - 1);
+  const depthOffset = (p.z || 0) * 2.5;
+  const finalDist = baseDist + depthOffset;
+  const v = new THREE.Vector3(ndcX, ndcY, -1).normalize().multiplyScalar(finalDist);
+  return v.applyQuaternion(camera.quaternion).add(camera.position);
+}
+
+window.VRShinecon.handPointToWorld = handPointToWorld;
+
+// ================= ВЗАИМОДЕЙСТВИЕ =================
+const raycaster = new THREE.Raycaster();
+function checkHandInteraction(delta) {
+  if (pinchCooldown > 0) pinchCooldown -= delta;
+
+  if (appState === 'GAME') {
+    if (activeGame && activeGame.api && activeGame.api.update) {
+      try { activeGame.api.update(delta); } catch (e) { console.error('Game Error:', e); }
+    }
+    return;
+  }
+
+  if (handLandmarksArray.length > 0) {
+    const lm = handLandmarksArray[0]; 
+    updateHandSkeleton(handLandmarksArray);
+    
+    const indexTipPos = handPointToWorld(lm[8], 2.0);
+    const indexMcpPos = handPointToWorld(lm[5], 2.0);
+    const dirWorld = indexTipPos.clone().sub(indexMcpPos).normalize();
+    
+    raycaster.set(indexTipPos, dirWorld); raycaster.far = MAX_LASER_DIST;
+    
+    const hits = (appState === 'STORE' && storeGroup.visible) ? raycaster.intersectObject(storePanelMesh) : [];
+    let endPoint, isHit = false, hitObj = null;
+    
+    if (hits.length > 0) { endPoint = hits[0].point; isHit = true; hitObj = hits[0]; }
+    else endPoint = indexTipPos.clone().add(dirWorld.clone().multiplyScalar(MAX_LASER_DIST));
+
+    if (appState === 'STORE') {
+      laserLine.visible = true; laserLine.geometry.setFromPoints([indexTipPos, endPoint]);
+      handDot.visible = true; handDot.position.copy(endPoint);
+      
+      const isPinching = isPinch(lm);
+      const laserColor = isHit ? (isPinching ? 0xffd54f : 0x69f0ae) : 0xff4081;
+      handDot.material.color.setHex(laserColor); laserLine.material.color.setHex(laserColor);
+
+      if (isHit && hitObj.uv) {
+        if (isPinching && !lastPinchState && pinchCooldown <= 0) {
+          const px = hitObj.uv.x * 1024, py = (1 - hitObj.uv.y) * 720;
+          handleStoreClick(px, py);
+          pinchCooldown = 0.5;
+        } else if (!isPinching) {
+          hoverTimer += delta;
+          handDot.scale.setScalar(1 + (hoverTimer / HOVER_CLICK_TIME) * 2);
+          if (hoverTimer >= HOVER_CLICK_TIME) {
+            const px = hitObj.uv.x * 1024, py = (1 - hitObj.uv.y) * 720;
+            handleStoreClick(px, py);
+            hoverTimer = 0; handDot.scale.setScalar(1);
+          }
+        }
+      } else {
+        if (hoverTimer > 0) { hoverTimer -= delta * 2; if (hoverTimer < 0) hoverTimer = 0; }
+        handDot.scale.setScalar(1 + (hoverTimer / HOVER_CLICK_TIME) * 2);
+      }
+      lastPinchState = isPinching;
+    } else {
+      laserLine.visible = false; handDot.visible = false;
+    }
+  } else {
+    laserLine.visible = false; handDot.visible = false; updateHandSkeleton(null);
+    hoverTimer = 0;
+  }
+}
+
+// ================= ЗАПУСК ИГРЫ =================
+function launchGame(game) {
+  if (!game || !game.entryCode) { showToast('Ошибка: нет кода игры'); return; }
+  window.VRShinecon.currentGame = game;
+  
+  try {
+    const fn = new Function('S', game.entryCode);
+    fn(window.VRShinecon);
+    if (activeGame && activeGame.api && typeof activeGame.api.start === 'function') activeGame.api.start();
+    appState = 'GAME'; 
+    storeGroup.visible = false; 
+    setStatusText(game.title + ' (.gar)');
+    handLines.forEach(l => l.visible = false);
+    jointMeshes.forEach(m => m.visible = false);
+  } catch (e) {
+    console.error('Ошибка entryCode:', e);
+    showToast('Ошибка игры: ' + e.message);
+  }
+}
+
+// ================= МАГАЗИН =================
+function createStore() {
+  storeGroup = new THREE.Group(); storeGroup.position.set(0, 1.6, -3.5); storeGroup.visible = false;
+  storeCanvas = document.createElement('canvas'); storeCanvas.width = 1024; storeCanvas.height = 720;
+  storeCtx = storeCanvas.getContext('2d'); storeTex = new THREE.CanvasTexture(storeCanvas);
+  storePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.5), new THREE.MeshBasicMaterial({ map: storeTex, transparent: true }));
+  storeGroup.add(storePanelMesh); scene.add(storeGroup); drawStore();
+}
+function enterStoreMode() { appState = 'STORE'; storeGroup.visible = true; drawStore(); setStatusText('Магазин .gar'); }
+
+function drawStore() {
+  if (!storeCtx) return;
+  const ctx = storeCtx, W = 1024, H = 720;
+  storeState.buttons = [];
+  ctx.fillStyle = '#0b1620'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1c2b3a'; ctx.fillRect(0, 0, W, 120);
+  ctx.fillStyle = '#ffd54f'; ctx.font = 'bold 44px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('🛒 МАГАЗИН ИГР', 30, 50);
+  
+  const tabs = [{ id: 'games', label: 'Игры', x: 30, w: 160 }, { id: 'format', label: 'О формате .gar', x: 210, w: 260 }];
+  tabs.forEach(t => {
+    const active = storeState.tab === t.id;
+    ctx.fillStyle = active ? '#ffd54f' : '#2c3e50'; roundRect(ctx, t.x, 70, t.w, 40, 10); ctx.fill();
+    ctx.fillStyle = active ? '#00131f' : '#cfe8ff'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(t.label, t.x + t.w/2, 90);
+    storeState.buttons.push({ id: 'stab:' + t.id, x: t.x, y: 70, w: t.w, h: 40 });
+  });
+
+  if (storeState.tab === 'games') {
+    ctx.fillStyle = '#69f0ae'; ctx.font = 'bold 26px Arial'; ctx.textAlign = 'left'; ctx.fillText('✓ Все игры — БЕСПЛАТНО', 30, 150);
+    if (storeState.games.length === 0) {
+      ctx.fillStyle = '#7f9bb3'; ctx.font = '30px Arial'; ctx.textAlign = 'center'; ctx.fillText('Пока нет игр.', W/2, 280);
+      ctx.fillStyle = '#ffd54f'; roundRect(ctx, W/2 - 200, 320, 400, 70, 14); ctx.fill();
+      ctx.fillStyle = '#00131f'; ctx.font = 'bold 28px Arial'; ctx.fillText('+ Загрузить .gar', W/2, 360);
+      storeState.buttons.push({ id: 'action:load', x: W/2 - 200, y: 320, w: 400, h: 70 });
+    } else {
+      storeState.games.forEach((game, i) => {
+        const col = i % 2, row = Math.floor(i / 2), cx = 30 + col * 497, cy = 190 + row * 240;
+        ctx.fillStyle = '#12293f'; roundRect(ctx, cx, cy, 467, 220, 16); ctx.fill();
+        ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2; roundRect(ctx, cx, cy, 467, 220, 16); ctx.stroke();
+        ctx.fillStyle = '#e3f2fd'; ctx.font = 'bold 26px Arial'; ctx.textAlign = 'left'; ctx.fillText(game.title, cx + 20, cy + 40);
+        ctx.fillStyle = '#b0bec5'; ctx.font = '19px Arial'; wrapText(ctx, game.description || '', cx + 20, cy + 80, 427, 24);
+        ctx.fillStyle = '#69f0ae'; roundRect(ctx, cx + 20, cy + 165, 427, 40, 10); ctx.fill();
+        ctx.fillStyle = '#00131f'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.fillText('▶ ИГРАТЬ', cx + 233, cy + 190);
+        storeState.buttons.push({ id: 'play:' + game.id, x: cx + 20, y: cy + 165, w: 427, h: 40, game: game });
+      });
+    }
+  } else {
+    ctx.fillStyle = '#e3f2fd'; ctx.font = 'bold 32px Arial'; ctx.textAlign = 'left'; ctx.fillText('Формат .gar', 30, 160);
+    ctx.fillStyle = '#90caf9'; ctx.font = '22px Arial'; wrapText(ctx, 'GAR — JSON-файл с игрой. Загружается через настройки или кнопку ниже.', 30, 210, W - 60, 30);
+  }
+  storeTex.needsUpdate = true;
+}
+
+function handleStoreClick(px, py) {
+  for (const b of storeState.buttons) {
+    if (px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
+      const id = b.id;
+      if (id === 'action:load') { pickGarFile(); return; }
+      if (id.startsWith('stab:')) { storeState.tab = id.slice(5); drawStore(); return; }
+      if (id.startsWith('play:')) { launchGame(b.game); return; }
+    }
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' '); let line = '', yy = y;
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' '; const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) { ctx.fillText(line, x, yy); line = words[n] + ' '; yy += lineHeight; }
+    else line = testLine;
+  }
+  ctx.fillText(line, x, yy);
+}
+function setStatusText(txt) { document.getElementById('status').textContent = txt; }
+function showToast(msg) { setStatusText(msg); setTimeout(() => setStatusText('Магазин .gar'), 2500); }
+
+// ================= СКЕЛЕТ =================
+const HAND_CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function createHandSkeleton() {
+  handLines = []; jointMeshes = [];
+  for (let h = 0; h < 2; h++) {
+    const handLineGeo = new THREE.BufferGeometry(); handLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(HAND_CONNECTIONS.length * 6), 3));
+    const hLines = new THREE.LineSegments(handLineGeo, new THREE.LineBasicMaterial({ color: 0x69f0ae, transparent: true, opacity: 0.95 })); hLines.frustumCulled = false; hLines.visible = false; scene.add(hLines); handLines.push(hLines);
+    const sphereGeo = new THREE.SphereGeometry(0.02, 8, 8);
+    for (let i = 0; i < 21; i++) { const mesh = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0xffffff })); mesh.visible = false; scene.add(mesh); jointMeshes.push(mesh); }
+  }
+}
+function updateHandSkeleton(lmArray) {
+  handLines.forEach(l => l.visible = false); jointMeshes.forEach(m => m.visible = false);
+  if (!lmArray || lmArray.length === 0) return;
+  lmArray.forEach((lm, handIdx) => {
+    if (handIdx > 1) return;
+    const lineGeo = handLines[handIdx].geometry;
+    const currentPts = lm.map((p, i) => handPointToWorld(p, 2.0));
+    const arr = lineGeo.attributes.position.array; let k = 0;
+    HAND_CONNECTIONS.forEach(([a, b]) => {
+      arr[k++] = currentPts[a].x; arr[k++] = currentPts[a].y; arr[k++] = currentPts[a].z;
+      arr[k++] = currentPts[b].x; arr[k++] = currentPts[b].y; arr[k++] = currentPts[b].z;
+    });
+    lineGeo.attributes.position.needsUpdate = true; handLines[handIdx].visible = true;
+    for (let i = 0; i < 21; i++) { const idx = handIdx * 21 + i; jointMeshes[idx].position.copy(currentPts[i]); jointMeshes[idx].visible = true; jointMeshes[idx].material.color.setHex(i === 8 ? 0xff4081 : 0xffffff); }
+  });
+}
+
+// ================= АНИМАЦИЯ И РЕНДЕР =================
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = Math.min(clock.getDelta(), 0.1);
+  checkHandInteraction(delta);
+  if (storeGroup && storeGroup.visible) storeGroup.lookAt(camera.position);
+  if (videoFeed && videoFeed.paused && videoFeed.srcObject) videoFeed.play().catch(()=>{});
+  if (videoTracker && videoTracker.paused && videoTracker.srcObject) videoTracker.play().catch(()=>{});
+  
+  const W = window.innerWidth, H = window.innerHeight, halfW = W / 2;
+  if (!leftCam) { leftCam = new THREE.PerspectiveCamera(FOV_DEG, 1, 0.1, 1000); rightCam = new THREE.PerspectiveCamera(FOV_DEG, 1, 0.1, 1000); }
+  const camPos = camera.position.clone(), camQuat = camera.quaternion.clone();
+  const rightOffset = new THREE.Vector3(1, 0, 0).applyQuaternion(camQuat).multiplyScalar(0.032);
+  leftCam.position.copy(camPos).sub(rightOffset); leftCam.quaternion.copy(camQuat);
+  rightCam.position.copy(camPos).add(rightOffset); rightCam.quaternion.copy(camQuat);
+  leftCam.aspect = halfW / H; rightCam.aspect = halfW / H; leftCam.updateProjectionMatrix(); rightCam.updateProjectionMatrix();
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+
+  renderer.setScissorTest(true); renderer.autoClear = false; renderer.clear();
+  const shift = settings.viewportShift;
+  
+  // Левый глаз
+  renderer.setViewport(shift, 0, halfW, H); renderer.setScissor(shift, 0, halfW, H);
+  renderer.clear(); 
+  if (window.bgScene && videoTexture) renderer.render(window.bgScene, window.bgCam);
+  renderer.clearDepth(); 
+  renderer.render(scene, leftCam);
+  
+  // Правый глаз
+  renderer.setViewport(halfW - shift, 0, halfW, H); renderer.setScissor(halfW - shift, 0, halfW, H);
+  renderer.clear(); 
+  if (window.bgScene && videoTexture) renderer.render(window.bgScene, window.bgCam);
+  renderer.clearDepth(); 
+  renderer.render(scene, rightCam);
+  
+  renderer.setScissorTest(false);
+}
+
+let leftCam = null, rightCam = null;
+
+initUI();
+init();
+</script>
+</body>
+  </html>
