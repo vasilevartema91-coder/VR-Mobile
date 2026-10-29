@@ -6,26 +6,15 @@
 <title>VR Arcade · Store · .gar</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    width: 100%; height: 100%; overflow: hidden;
-    background: #000; font-family: Arial, sans-serif;
-    touch-action: none; user-select: none; -webkit-user-select: none;
-  }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: Arial, sans-serif; touch-action: none; user-select: none; }
   canvas { display: block; position: absolute; top: 0; left: 0; z-index: 2; touch-action: none; }
   #videoFeed, #videoTracker { display: none; }
   
   #ui2d { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
   
-  #btnSettings {
-    position: absolute; top: 20px; right: 20px; width: 60px; height: 60px;
-    background: rgba(79, 195, 247, 0.9); border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-size: 30px; color: #000; pointer-events: auto; box-shadow: 0 0 15px rgba(79,195,247,0.8); cursor: pointer; border: none;
-  }
+  #btnSettings { position: absolute; top: 20px; right: 20px; width: 60px; height: 60px; background: rgba(79, 195, 247, 0.9); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; color: #000; pointer-events: auto; box-shadow: 0 0 15px rgba(79,195,247,0.8); cursor: pointer; border: none; }
 
-  #settingsPanel {
-    position: absolute; inset: 0; background: rgba(0,0,0,0.92); display: none; flex-direction: column;
-    align-items: center; justify-content: flex-start; pointer-events: auto; color: #fff; padding: 20px; overflow-y: auto;
-  }
+  #settingsPanel { position: absolute; inset: 0; background: rgba(0,0,0,0.92); display: none; flex-direction: column; align-items: center; justify-content: flex-start; pointer-events: auto; color: #fff; padding: 20px; overflow-y: auto; }
   #settingsPanel h2 { color: #ff4081; margin: 10px 0 20px; font-size: 1.7rem; text-align: center; }
   #settingsPanel h3 { color: #ffd54f; margin: 20px 0 10px; font-size: 1.2rem; text-align: center; }
   .slider-container { width: 100%; max-width: 400px; margin-bottom: 15px; text-align: center; }
@@ -38,6 +27,9 @@
   .btn-close { background: #ef5350; color: #fff; margin-top: 10px; }
   .btn-load { background: #ffd54f; color: #000; }
   .btn-clear { background: #ef5350; color: #fff; margin-top: 12px; }
+  .btn-fs { background: #4fc3f7; color: #000; margin-top: 10px; }
+  .btn-mode { background: #333; color: #fff; margin: 5px; }
+  .btn-mode.active { background: #69f0ae; color: #000; }
   #garList { width: 100%; max-width: 420px; max-height: 200px; overflow-y: auto; background: #101820; border-radius: 10px; padding: 8px; margin-top: 6px; }
   .gar-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #1c2b3a; font-size: 0.9rem; }
   .gar-item .title { color: #e3f2fd; font-weight: bold; }
@@ -46,6 +38,14 @@
   #status { position: fixed; top: 20px; left: 20px; color: #4fc3f7; font-size: 0.75rem; z-index: 5; background: rgba(0,0,0,0.5); padding: 6px 10px; border-radius: 6px; pointer-events: none; font-family: monospace; }
   #startOverlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.92); color: #fff; text-align: center; z-index: 20; padding: 20px; }
   #startBtn { margin-top: 20px; padding: 18px 50px; font-size: 1.2rem; background: linear-gradient(135deg, #4fc3f7, #0288d1); color: #fff; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
+
+  /* Контроллер */
+  #controllerUI { display: none; position: fixed; bottom: 20px; left: 0; width: 100%; justify-content: space-between; padding: 0 30px; z-index: 15; pointer-events: none; }
+  .ctrl-btn { width: 80px; height: 80px; background: rgba(255,255,255,0.2); border: 2px solid #4fc3f7; border-radius: 50%; pointer-events: auto; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 24px; user-select: none; }
+  .ctrl-btn:active { background: rgba(79, 195, 247, 0.6); }
+
+  #roomUI { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 20px; border-radius: 15px; border: 2px solid #4fc3f7; pointer-events: auto; text-align: center; color: #fff; z-index: 25; width: 300px;}
+  #roomUI input { font-size: 24px; padding: 10px; width: 150px; text-align: center; margin: 10px 0; border-radius: 10px; border: none; }
 </style>
 </head>
 <body>
@@ -57,7 +57,21 @@
 <div id="ui2d">
   <button id="btnSettings">⚙️</button>
   <div id="settingsPanel">
-    <h2>Настройки Стерео</h2>
+    <h2>Настройки</h2>
+    
+    <button class="btn-action btn-fs" id="btnFullscreen">Вернуть на весь экран</button>
+
+    <h3>Режим работы</h3>
+    <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+      <button class="btn-action btn-mode active" id="btnModeHeadset">Шлем</button>
+      <button class="btn-action btn-mode" id="btnModeController">Контроллер</button>
+    </div>
+
+    <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+      <button class="btn-action" id="btnCreateRoom" style="background: #69f0ae; color: #000;">Создать</button>
+      <button class="btn-action" id="btnJoinRoom" style="background: #4fc3f7; color: #000;">Войти</button>
+    </div>
+    
     <div class="slider-container">
       <label>Сдвиг картинки (в пикселях)</label>
       <input type="range" id="ipdSlider" min="-200" max="200" value="25" step="1">
@@ -72,16 +86,32 @@
   </div>
 </div>
 
+<div id="controllerUI">
+  <div class="ctrl-btn" id="ctrlLeft">L</div>
+  <div class="ctrl-btn" id="ctrlRight">R</div>
+</div>
+
+<div id="roomUI">
+  <h3>LAN Комната</h3>
+  <div id="roomCodeDisplay" style="font-size: 40px; color: #69f0ae; font-weight: bold; margin: 10px 0;">----</div>
+  <input type="text" id="roomInput" placeholder="Код" maxlength="4" style="display:none;">
+  <br>
+  <button class="btn-action" id="btnRoomConfirm" style="background: #4fc3f7; color: #000;">ОК</button>
+  <button class="btn-action" id="btnRoomClose" style="background: #ef5350; color: #fff;">Закрыть</button>
+</div>
+
 <div id="status" class="hidden">Инициализация…</div>
 
 <div id="startOverlay">
   <h1>VR Arcade</h1>
-  <p>Магазин игр (.gar) · Камера в качестве фона</p>
+  <p>Режим: LAN-Мультиплеер (Wi-Fi)</p>
   <button id="startBtn">ЗАПУСТИТЬ</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Библиотека PeerJS для прямого соединения по Wi-Fi -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
 <script>
 // ================= Глобальные =================
@@ -106,6 +136,13 @@ let storeGroup = null, storePanelMesh = null;
 let targetQuat = new THREE.Quaternion();
 let isFirstGyroFrame = true;
 let wakeLock = null;
+
+// LAN Мультиплеер
+let deviceMode = 'headset'; 
+let peer = null;
+let conn = null;
+let roomCode = null;
+let controllerInterval = null;
 
 // ================= API =================
 window.VRShinecon = {
@@ -168,6 +205,97 @@ function initUI() {
   document.getElementById('btnLoadGar').addEventListener('click', pickGarFile);
   document.getElementById('btnClearGames').addEventListener('click', clearAllGames);
   document.getElementById('garFileInput').addEventListener('change', (e) => { handleGarFile(e.target.files[0]); e.target.value = ''; });
+
+  document.getElementById('btnFullscreen').addEventListener('click', () => { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); });
+
+  // Выбор режима
+  document.getElementById('btnModeHeadset').addEventListener('click', () => {
+    deviceMode = 'headset';
+    document.getElementById('controllerUI').style.display = 'none';
+    document.getElementById('btnModeHeadset').classList.add('active');
+    document.getElementById('btnModeController').classList.remove('active');
+    if (controllerInterval) clearInterval(controllerInterval);
+    if (videoTexture && bgMesh) { bgMesh.material.map = videoTexture; bgMesh.material.color.setHex(0xffffff); bgMesh.material.needsUpdate = true; }
+  });
+  
+  document.getElementById('btnModeController').addEventListener('click', () => {
+    deviceMode = 'controller';
+    document.getElementById('controllerUI').style.display = 'flex';
+    document.getElementById('btnModeController').classList.add('active');
+    document.getElementById('btnModeHeadset').classList.remove('active');
+    if (bgMesh) { bgMesh.material.map = null; bgMesh.material.color.setHex(0x000000); bgMesh.material.needsUpdate = true; }
+    handLines.forEach(l => l.visible = false);
+    jointMeshes.forEach(m => m.visible = false);
+  });
+
+  // Логика LAN (PeerJS)
+  document.getElementById('btnCreateRoom').addEventListener('click', () => {
+    roomCode = Math.floor(1000 + Math.random() * 9000).toString();
+    document.getElementById('roomCodeDisplay').textContent = roomCode;
+    document.getElementById('roomCodeDisplay').style.display = 'block';
+    document.getElementById('roomInput').style.display = 'none';
+    document.getElementById('roomUI').style.display = 'block';
+    
+    // Создаем хост
+    if (peer) peer.destroy();
+    peer = new Peer('vr-arcade-' + roomCode);
+    peer.on('open', (id) => {
+      setStatusText('Комната создана: ' + roomCode);
+    });
+    peer.on('connection', (connection) => {
+      conn = connection;
+      setStatusText('Игрок подключился!');
+      conn.on('data', (data) => {
+        // Получаем данные от контроллера
+        if (deviceMode === 'headset' && data.type === 'ctrl') {
+          camera.quaternion.copy(data.quat);
+          // Здесь можно двигать руки на основе data.leftBtn/rightBtn
+        }
+      });
+    });
+  });
+
+  document.getElementById('btnJoinRoom').addEventListener('click', () => {
+    document.getElementById('roomCodeDisplay').textContent = '----';
+    document.getElementById('roomCodeDisplay').style.display = 'block';
+    document.getElementById('roomInput').style.display = 'block';
+    document.getElementById('roomInput').value = '';
+    document.getElementById('roomUI').style.display = 'block';
+  });
+
+  document.getElementById('btnRoomConfirm').addEventListener('click', () => {
+    const code = document.getElementById('roomInput').value;
+    if (code.length === 4) {
+      roomCode = code;
+      document.getElementById('roomUI').style.display = 'none';
+      
+      // Подключаемся к хосту
+      if (peer) peer.destroy();
+      peer = new Peer();
+      peer.on('open', () => {
+        conn = peer.connect('vr-arcade-' + roomCode);
+        conn.on('open', () => {
+          setStatusText('Подключено к комнате!');
+          // Если мы контроллер, начинаем отправлять данные
+          if (deviceMode === 'controller') {
+            if (controllerInterval) clearInterval(controllerInterval);
+            controllerInterval = setInterval(() => {
+              if (conn && conn.open) {
+                conn.send({
+                  type: 'ctrl',
+                  quat: camera.quaternion,
+                  leftBtn: document.getElementById('ctrlLeft').matches(':active'),
+                  rightBtn: document.getElementById('ctrlRight').matches(':active')
+                });
+              }
+            }, 50);
+          }
+        });
+      });
+    }
+  });
+
+  document.getElementById('btnRoomClose').addEventListener('click', () => { document.getElementById('roomUI').style.display = 'none'; });
 }
 
 function init() {
@@ -200,32 +328,23 @@ function init() {
   animate();
 }
 
-// ================= КАМЕРА С ПОИСКОМ ЗАДНЕЙ =================
+// ================= КАМЕРА =================
 async function startCameraStream() {
   let selectedDeviceId = null;
-  
   try {
     await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === 'videoinput');
-    
-    // Ищем заднюю камеру
     const backCam = videoDevices.find(d => {
       const label = d.label.toLowerCase();
       return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('camera2 0');
     });
-    
-    if (backCam) {
-      selectedDeviceId = backCam.deviceId;
-      setStatusText('Камера: Задняя');
-    }
-  } catch(e) { console.warn('Не удалось найти заднюю камеру', e); }
+    if (backCam) { selectedDeviceId = backCam.deviceId; setStatusText('Камера: Задняя'); }
+  } catch(e) {}
 
   try {
     const constraints = { 
-      video: selectedDeviceId 
-        ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } 
-        : { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, 
+      video: selectedDeviceId ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } : { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, 
       audio: false 
     };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -249,16 +368,13 @@ async function startAll() {
   try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (err) {}
   try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch(e) {}
   
-  setStatusText('Камера: поиск...');
+  setStatusText('Запуск...');
   const ok = await startCameraStream();
   
-  if (ok) {
+  if (ok && deviceMode === 'headset') {
     videoTexture = new THREE.VideoTexture(videoFeed);
-    videoTexture.minFilter = THREE.LinearFilter;
-    videoTexture.magFilter = THREE.LinearFilter;
-    bgMesh.material.map = videoTexture;
-    bgMesh.material.color.setHex(0xffffff);
-    bgMesh.material.needsUpdate = true;
+    videoTexture.minFilter = THREE.LinearFilter; videoTexture.magFilter = THREE.LinearFilter;
+    bgMesh.material.map = videoTexture; bgMesh.material.color.setHex(0xffffff); bgMesh.material.needsUpdate = true;
     
     handsModel = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
     handsModel.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
@@ -269,8 +385,7 @@ async function startAll() {
     };
     sendFrame();
   } else {
-    setStatusText('Камера: ОШИБКА (играем без фона)');
-    bgMesh.material.color.setHex(0x101820);
+    setStatusText('Режим: Контроллер (без камеры)');
   }
   
   initGyro(); enterStoreMode();
@@ -325,13 +440,13 @@ window.VRShinecon.handPointToWorld = handPointToWorld;
 const raycaster = new THREE.Raycaster();
 function checkHandInteraction(delta) {
   if (pinchCooldown > 0) pinchCooldown -= delta;
-
   if (appState === 'GAME') {
     if (activeGame && activeGame.api && activeGame.api.update) {
       try { activeGame.api.update(delta); } catch (e) { console.error('Game Error:', e); }
     }
     return;
   }
+  if (deviceMode === 'controller') return;
 
   if (handLandmarksArray.length > 0) {
     const lm = handLandmarksArray[0]; 
@@ -530,14 +645,12 @@ function animate() {
   renderer.setScissorTest(true); renderer.autoClear = false; renderer.clear();
   const shift = settings.viewportShift;
   
-  // Левый глаз
   renderer.setViewport(shift, 0, halfW, H); renderer.setScissor(shift, 0, halfW, H);
   renderer.clear(); 
   if (window.bgScene && videoTexture) renderer.render(window.bgScene, window.bgCam);
   renderer.clearDepth(); 
   renderer.render(scene, leftCam);
   
-  // Правый глаз
   renderer.setViewport(halfW - shift, 0, halfW, H); renderer.setScissor(halfW - shift, 0, halfW, H);
   renderer.clear(); 
   if (window.bgScene && videoTexture) renderer.render(window.bgScene, window.bgCam);
