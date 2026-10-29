@@ -154,7 +154,7 @@ function handleGarFile(file) {
       const existing = storeState.games.findIndex(g => g.id === data.id);
       if (existing >= 0) storeState.games[existing] = data; else storeState.games.push(data);
       saveGarGamesToStorage(); refreshGarListUI(); drawStore();
-    } catch (err) { showToast('Ошибка .gar'); }
+    } catch (err) { showToast('Ошибка .gar: ' + err.message); }
   };
   reader.readAsText(file);
 }
@@ -200,40 +200,32 @@ function init() {
   animate();
 }
 
-// ================= МУЛЬТИ-МЕТОД КАМЕРЫ + ШИРОКИЙ УГОЛ =================
+// ================= КАМЕРА С ПОИСКОМ ЗАДНЕЙ =================
 async function startCameraStream() {
   let selectedDeviceId = null;
   
   try {
-    // 1. Сначала просим доступ, чтобы получить названия камер
-    await navigator.mediaDevices.getUserMedia({ video: true });
+    await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === 'videoinput');
     
-    // 2. Ищем широкоугольную камеру по названию (ультраширокий объектив)
-    const wideCam = videoDevices.find(d => {
+    // Ищем заднюю камеру
+    const backCam = videoDevices.find(d => {
       const label = d.label.toLowerCase();
-      return label.includes('ultra') || label.includes('wide') || label.includes('0.5') || label.includes('camera2 1');
+      return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('camera2 0');
     });
     
-    if (wideCam) {
-      selectedDeviceId = wideCam.deviceId;
-      setStatusText('Камера: Широкоугольная');
-    } else {
-      // Если широкой нет, берем обычную (не фронтальную)
-      const backCam = videoDevices.find(d => {
-        const label = d.label.toLowerCase();
-        return label.includes('back') || label.includes('rear') || label.includes('environment');
-      });
-      if (backCam) selectedDeviceId = backCam.deviceId;
-      setStatusText('Камера: Обычная');
+    if (backCam) {
+      selectedDeviceId = backCam.deviceId;
+      setStatusText('Камера: Задняя');
     }
-  } catch(e) { console.warn('Не удалось найти широкую камеру', e); }
+  } catch(e) { console.warn('Не удалось найти заднюю камеру', e); }
 
-  // 3. Запускаем поток с выбранной камеры (или дефолтной)
   try {
     const constraints = { 
-      video: selectedDeviceId ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, 
+      video: selectedDeviceId 
+        ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } 
+        : { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, 
       audio: false 
     };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -242,7 +234,6 @@ async function startCameraStream() {
     await new Promise(res => { if (videoFeed.videoWidth) res(); else videoFeed.onloadedmetadata = () => res(); });
     return true;
   } catch(e) {
-    // Если что-то пошло не так, пробуем вообще любую камеру
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       videoFeed.srcObject = stream; videoTracker.srcObject = stream;
@@ -562,4 +553,4 @@ initUI();
 init();
 </script>
 </body>
-  </html>
+</html>
